@@ -1,0 +1,85 @@
+diff --git a/apps/blueman-sendto b/apps/blueman-sendto
+index 99632f3..cf3ef52 100755
+--- a/apps/blueman-sendto
++++ b/apps/blueman-sendto
+@@ -163,7 +163,7 @@ class Sender(GObject.GObject):
+         self.transfer.connect("completed", self.on_transfer_completed)
+ 
+     def on_transfer_failed(self, _object_push, error):
+-        self.on_transfer_error(None, None, str(error))
++        self.on_transfer_error(None, str(error))
+ 
+     def on_transfer_progress(self, _transfer, progress):
+         self.transferred = progress
+diff --git a/blueman/bluez/Adapter.py b/blueman/bluez/Adapter.py
+index 505db1b..6484828 100644
+--- a/blueman/bluez/Adapter.py
++++ b/blueman/bluez/Adapter.py
+@@ -38,7 +38,8 @@ def list_devices(self):
+             devices = []
+             for path, interfaces in objects.items():
+                 if 'org.bluez.Device1' in interfaces:
+-                    devices.append(path)
++                    if path.startswith(self.get_object_path()):
++                        devices.append(path)
+             return [Device(device) for device in devices]
+ 
+     @raise_dbus_error
+diff --git a/blueman/bluez/obex/Manager.py b/blueman/bluez/obex/Manager.py
+index 39e24a4..6caf421 100644
+--- a/blueman/bluez/obex/Manager.py
++++ b/blueman/bluez/obex/Manager.py
+@@ -38,7 +38,7 @@ def on_interfaces_added(object_path, interfaces):
+                     def on_tranfer_completed(_transfer):
+                         self._on_transfer_completed(object_path, True)
+ 
+-                    def on_tranfer_error(_transfer):
++                    def on_tranfer_error(_transfer, _msg):
+                         self._on_transfer_completed(object_path, False)
+ 
+                     self._transfers[object_path] = Transfer(object_path)
+diff --git a/blueman/main/applet/BluezAgent.py b/blueman/main/applet/BluezAgent.py
+index 9a6c1fd..d7734ac 100644
+--- a/blueman/main/applet/BluezAgent.py
++++ b/blueman/main/applet/BluezAgent.py
+@@ -215,9 +215,8 @@ def on_confirm_action(n, action):
+             notify_message += "\n" + _("Confirm value for authentication:") + " <b>%s</b>" % passkey
+         actions = [["confirm", _("Confirm")], ["deny", _("Deny")]]
+ 
+-        Notification("Bluetooth", notify_message, 0,
+-                     actions, on_confirm_action,
+-                     pixbuf=get_icon("blueman", 48), status_icon=self.status_icon)
++        self.n = Notification("Bluetooth", notify_message, 0, actions, on_confirm_action,
++                              pixbuf=get_icon("blueman", 48), status_icon=self.status_icon)
+ 
+     @AgentMethod
+     def RequestAuthorization(self, device, ok, err):
+diff --git a/blueman/plugins/applet/SerialManager.py b/blueman/plugins/applet/SerialManager.py
+index e7607a2..b844db1 100644
+--- a/blueman/plugins/applet/SerialManager.py
++++ b/blueman/plugins/applet/SerialManager.py
+@@ -147,6 +147,9 @@ def flt(dev):
+         active_ports = map(flt, ports)
+ 
+         for port in active_ports:
++            if not port:
++                continue
++
+             name = "/dev/rfcomm%d" % port
+             try:
+                 dprint("Disconnecting", name)
+diff --git a/module/_blueman.pyx b/module/_blueman.pyx
+index 6a19c73..f3d4f41 100644
+--- a/module/_blueman.pyx
++++ b/module/_blueman.pyx
+@@ -199,8 +199,8 @@ def rfcomm_list():
+                 "channel": dl.dev_info[i].channel,
+                 "flags": dl.dev_info[i].flags,
+                 "state": RFCOMM_STATES[dl.dev_info[i].state],
+-                "src": src,
+-                "dst": dst
++                "src": src.decode("UTF-8"),
++                "dst": dst.decode("UTF-8")
+             })
+ 
+     free(dl)
